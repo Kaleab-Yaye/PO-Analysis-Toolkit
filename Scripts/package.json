@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "@types/frida-gum": "^18.3.0",
+    "@types/node": "^20.8.4",
+    "esbuild": "^0.19.5"
+  },
+  "scripts": {
+    "build": "esbuild src/hookCommonApp$initSmSdk$1.ts --bundle --outfile=dist/hookCommonApp$initSmSdk$1.js --platform=node"
+  }
+}

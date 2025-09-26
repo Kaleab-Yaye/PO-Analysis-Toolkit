@@ -53,7 +53,7 @@ This is an inner class the compiler generated; in this case it's being used as a
 
 This signature in the app is a clear indication that the SDK operates on the logic of **callbacks**. The SDK provides the interface and the app tells the SDK through the interface what it needs the SDK to do.
 
-This is a common design you follow when you want to incorporate an SDK into an app — you use callbacks. I am sure the SDK uses this callback to do what the app told it to do but we are not sure if this is the only way the SDK communicates with the app. We have seen that `create()` starts the SDK, but what happens after that inside the SDK is complicated and something we are trying to avoid. We must be sure it is only through **callbacks** that the SDK communicates with the app, meaning we have to make sure the SDK doesn't try to call classes of the app without the callback — which I call "Leaky Abstractions."
+This is a common design you follow when you want to incorporate an SDK into an app — you use callbacks. I am sure the SDK uses this callback to do what the app told it to do but we are not sure if this is the only way the SDK communicates with the app. We have seen that `create()` starts the SDK, but what happens after that inside the SDK is complicated and something we are trying to avoid. We must be sure it is only through **callbacks** that the SDK communicates with the app, meaning we have to make sure the SDK doesn't try to call classes of the app without the callback, which I call "Leaky Abstractions."
 
 So I also designed another script that will search the smali files inside the SDK to make sure there are no "leaky abstractions." The script operates on the following logic:
 
@@ -131,7 +131,7 @@ What this means is that the complex and sophisticated checks done by the `ishume
 > **Note**: The following explanation will show that the poor handling of the SDK is what made the app susceptible to our attack — not because the SDK is weak and not because we understood all the logic of the SDK.
 
 ## How the app implemented the callback
-We will start with `onSuccess(Ljava/lang/String;)V`. The reason is `onError` — while the SDK creators made it to be more than just an outlet for logging errors — in this app it is just what `onError` is doing.
+We will start with `onSuccess(Ljava/lang/String;)V`. The reason is `onError`, while the SDK creators made it to be more than just an outlet for logging errors — in this app it is just what `onError` is doing.
 
 ### onSuccess
 This method takes a string as an argument and the SDK, from what I have seen from dynamic hooks, passes a complicated and encrypted string that was meant to be handled by the app. But the devs of PO only needed the SDK to call `onSuccess` and wanted to handle the logic in a rather lazy but smart way.
@@ -140,7 +140,7 @@ A lot happens in `onSuccess`. Most of it are dead ends (decoys the devs put to m
 
 The app uses a `PreferenceManager` class to handle the shared preferences and they define a method `setSmeiId()` to handle and persist things related to the SDK. This method calls the static method on `Landroid/content/SharedPreferences$Editor` which is `putString(key, value)` and passes the value `putString("smei_id", "")`, so the call on `onSuccess()` results in `smei_id` being persisted as `""`. I hypothesized that other parts of the app will access this value in shared preferences to see if the app environment is correct.
 
-The class `PreferenceManager` has another method that is used to access those values stored by `setSmeiId()` — it is `getSmeiId()`. This method goes into the shared preferences and retrieves the value associated with the key `"smei_id"` and returns it.
+The class `PreferenceManager` has another method that is used to access those values stored by `setSmeiId()`, it is `getSmeiId()`. This method goes into the shared preferences and retrieves the value associated with the key `"smei_id"` and returns it.
 
 I did a terminal search app-wide to see if any class calls `getSmeiId()`:
 
@@ -157,7 +157,7 @@ C:\RE\PO-RE\PO\smali_classes3\comndroidtool\CommonApp.smali:1720: invoke-virtua
 
 It then became clearer that the devs of PO used a singleton design to interact with the SDK and the same singleton design (the same class) to interact with what the SDK persists. The method responsible for this, even though you can't see it from the output, is `getSmeiId`.
 
-To ensure this wasn't a dead end I did another terminal search to see how much this method is called; the numerous hits confirmed that it is used by many parts of the app — meaning hooking `onSuccess` can have an app-wide effect. The devs did one last trick: they know the correct value stored in shared preferences regarding the SDK is `("smei_id","")`, but to confuse a reverse-engineer they made it that if `getSmeiId` returns `""` (which `getSmeiId` calls) they log an error (which leads nowhere) and return `""`. This is their last fight because someone who assumed `""` was the right value stored because of a call to `onSuccess` might assume their analysis is wrong if the app is logging an Error.
+To ensure this wasn't a dead end I did another terminal search to see how much this method is called; the numerous hits confirmed that it is used by many parts of the app, meaning hooking `onSuccess` can have an app-wide effect. The devs did one last trick: they know the correct value stored in shared preferences regarding the SDK is `("smei_id","")`, but to confuse a reverse-engineer they made it that if `getSmeiId` returns `""` (which `getSmeiId` calls) they log an error (which leads nowhere) and return `""`. This is their last fight because someone who assumed `""` was the right value stored because of a call to `onSuccess` might assume their analysis is wrong if the app is logging an Error.
 
 By doing all that we made sure that a call to `onSuccess` is later combined by a logic of validation, strengthening our hypothesis that there are no *leaky abstractions* and hooking `onSuccess` could work.
 

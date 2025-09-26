@@ -4,10 +4,10 @@
 In this write-up I will show how I was able to defeat the sophisticated 3rd-party SDK the app uses to check if the device is rooted, if it is an emulator, if Magisk is present on the system. In general this is the center where anti-fraud checks happen, and crippling this SDK results in app-wide vulnerability for various attacks. In this write-up I will show how I achieved it.
 
 # defeating-ishumei-anti-fraud-sdk-analysis
-There is another write-up that I did on how I discovered the `ishumei` SDK is the central hub for anti-fraud detection — you can look it up; I am not repeating it here. This dossier assumes that you understand why `ishumei` is important for the analysis we will do.
+There is another write-up that I did on how I discovered the `ishumei` SDK is the central hub for anti-fraud detection you can look it up; I am not repeating it here. This dossier assumes that you understand why `ishumei` is important for the analysis we will do.
 
 ## First encounter with `ishumei` SDK
-The ishumei SDK is (probably) a commercial-grade SDK that the PO devs integrated into their app. As you can see from the image below, this is not your typical first RE project — it is made and meant to be hostile to anyone who tries to reverse-engineer and understand the inner workings of the SDK.
+The ishumei SDK is (probably) a commercial-grade SDK that the PO devs integrated into their app. As you can see from the image below, this is not your typical first RE project it is made and meant to be hostile to anyone who tries to reverse-engineer and understand the inner workings of the SDK.
 
 <img width="1183" height="516" alt="image" src="https://github.com/user-attachments/assets/a01471ed-e8a0-48a9-af89-ccb8bbc55005" />
 
@@ -53,13 +53,13 @@ This is an inner class the compiler generated; in this case it's being used as a
 
 This signature in the app is a clear indication that the SDK operates on the logic of **callbacks**. The SDK provides the interface and the app tells the SDK through the interface what it needs the SDK to do.
 
-This is a common design you follow when you want to incorporate an SDK into an app — you use callbacks. I am sure the SDK uses this callback to do what the app told it to do but we are not sure if this is the only way the SDK communicates with the app. We have seen that `create()` starts the SDK, but what happens after that inside the SDK is complicated and something we are trying to avoid. We must be sure it is only through **callbacks** that the SDK communicates with the app, meaning we have to make sure the SDK doesn't try to call classes of the app without the callback, which I call "Leaky Abstractions."
+This is a common design you follow when you want to incorporate an SDK into an app, you use callbacks. I am sure the SDK uses this callback to do what the app told it to do but we are not sure if this is the only way the SDK communicates with the app. We have seen that `create()` starts the SDK, but what happens after that inside the SDK is complicated and something we are trying to avoid. We must be sure it is only through **callbacks** that the SDK communicates with the app, meaning we have to make sure the SDK doesn't try to call classes of the app without the callback, which I call "Leaky Abstractions."
 
 So I also designed another script that will search the smali files inside the SDK to make sure there are no "leaky abstractions." The script operates on the following logic:
 
 1. The search has to happen at the root of the SDK.
 2. We strategically ignore any call that involves `Lcom/ishumei`.
-3. We ignore any lines that involve `invoke-virtual`; this avoids false positives and repeated calls to one class from the SDK — we need to locate the source of that object's creation.
+3. We ignore any lines that involve `invoke-virtual`; this avoids false positives and repeated calls to one class from the SDK, we need to locate the source of that object's creation.
 4. We include `invoke-static` and `invoke-direct` (which is usually associated with `<init>`).
 
 ```powershell
@@ -128,10 +128,10 @@ The output for the above search was:
 
 What this means is that the complex and sophisticated checks done by the `ishumei` SDK boil down to those few classes. Now we could potentially start our tracing within those classes and methods, but since we are planning to also pass the whole thing dynamically, dealing with how the app works with what is passed to the implementation (`onError` and `onSuccess`) suffices for now.
 
-> **Note**: The following explanation will show that the poor handling of the SDK is what made the app susceptible to our attack — not because the SDK is weak and not because we understood all the logic of the SDK.
+> **Note**: The following explanation will show that the poor handling of the SDK is what made the app susceptible to our attack, not because the SDK is weak and not because we understood all the logic of the SDK.
 
 ## How the app implemented the callback
-We will start with `onSuccess(Ljava/lang/String;)V`. The reason is `onError`, while the SDK creators made it to be more than just an outlet for logging errors — in this app it is just what `onError` is doing.
+We will start with `onSuccess(Ljava/lang/String;)V`. The reason is `onError`, while the SDK creators made it to be more than just an outlet for logging errors, in this app it is just what `onError` is doing.
 
 ### onSuccess
 This method takes a string as an argument and the SDK, from what I have seen from dynamic hooks, passes a complicated and encrypted string that was meant to be handled by the app. But the devs of PO only needed the SDK to call `onSuccess` and wanted to handle the logic in a rather lazy but smart way.
@@ -159,10 +159,10 @@ It then became clearer that the devs of PO used a singleton design to interact w
 
 To ensure this wasn't a dead end I did another terminal search to see how much this method is called; the numerous hits confirmed that it is used by many parts of the app, meaning hooking `onSuccess` can have an app-wide effect. The devs did one last trick: they know the correct value stored in shared preferences regarding the SDK is `("smei_id","")`, but to confuse a reverse-engineer they made it that if `getSmeiId` returns `""` (which `getSmeiId` calls) they log an error (which leads nowhere) and return `""`. This is their last fight because someone who assumed `""` was the right value stored because of a call to `onSuccess` might assume their analysis is wrong if the app is logging an Error.
 
-By doing all that we made sure that a call to `onSuccess` is later combined by a logic of validation, strengthening our hypothesis that there are no *leaky abstractions* and hooking `onSuccess` could work.
+By doing all that we made sure that a call to `onSuccess` is later acombined by a logic of validation, strengthening our hypothesis that there are no *leaky abstractions* and hooking `onSuccess` could work.
 
 ### The onSuccess contingency
-Now that we have made sure that `onSuccess` is the main channel where hooks should happen and that we can route any call from `onError` to `onSuccess`, the problem I faced was we don't know how many times `onSuccess` is called and how many times `onError` could be called. My fear was calling `onSuccess` 3 times because `onError` was called three times while `onSuccess` must be called 2 times — that could cause an issue. But upon closer look at what happens when `onSuccess` is called, it became clear that nothing really "app-breaking" could happen from it. This is because when `onSuccess` is called then `setSmeiId("")` is called — calling `setSmeiId` with the same argument overwrites the value stored in shared preferences with the same value, leading to the conclusion that multiple calls to `onSuccess` are **idempotent**.
+Now that we have made sure that `onSuccess` is the main channel where hooks should happen and that we can route any call from `onError` to `onSuccess`, the problem I faced was we don't know how many times `onSuccess` is called and how many times `onError` could be called. My fear was calling `onSuccess` 3 times because `onError` was called three times while `onSuccess` must be called 2 times, that could cause an issue. But upon closer look at what happens when `onSuccess` is called, it became clear that nothing really "app-breaking" could happen from it. This is because when `onSuccess` is called then `setSmeiId("")` is called, calling `setSmeiId` with the same argument overwrites the value stored in shared preferences with the same value, leading to the conclusion that multiple calls to `onSuccess` are **idempotent**.
 
 ## The hook
 Based on all the analysis I present, I crafted a Frida hook that:

@@ -5,6 +5,6 @@
     "esbuild": "^0.19.5"
   },
   "scripts": {
-    "build": "esbuild src/hookCommonApp$initSmSdk$1.ts --bundle --outfile=dist/hookCommonApp$initSmSdk$1.js --platform=node"
+    "build": "esbuild src/HookEcryptionHelper.ts --bundle --outfile=dist/HookEcryptionHelper.js --platform=node"
   }
 }
